@@ -31,6 +31,7 @@ interface ReportChannelConfig {
   source?: string;
 }
 
+
 /**
  * Ensures a Discord client exists and is ready
  * @param {IAgentRuntime} runtime - The Agent runtime
@@ -66,10 +67,55 @@ async function ensureDiscordClient(runtime: IAgentRuntime): Promise<DiscordServi
   }
 }
 
+/**
+ * Provides comprehensive workflow guidance for check-in setup
+ * @returns Formatted guidance message explaining the complete workflow
+ */
+function getWorkflowGuidance(): string {
+  return `🔧 **IMPORTANT: Check-in Setup Workflow**
+
+**⚠️ CRITICAL PREREQUISITE:** Team members must be added before setting up check-ins!
+
+**Why this matters:**
+- Check-ins without team members = empty notifications
+- No one receives check-in requests
+- No updates get collected
+- You waste time setting up useless check-ins
+
+**📋 PROPER WORKFLOW (Follow This Order):**
+
+**STEP 1: Add Team Members** ⚠️ **(REQUIRED FIRST)**
+\`\`\`
+Add [Name] to [Section] with discord @username
+\`\`\`
+**Examples:**
+\`\`\`
+Add John to Development with discord @john123
+Add Sarah to Marketing with discord @sarah456
+\`\`\`
+
+**STEP 2: Set Up Check-in Schedule** (After adding team members)
+\`\`\`
+How do I set up check-ins?
+\`\`\`
+
+**STEP 3: Record Check-in Details** (Final step)
+\`\`\`
+Record check-in details
+\`\`\`
+
+**🔍 Verify Your Setup:**
+- Use \`list team members\` to check if you have team members
+- If no team members exist, complete Step 1 first
+- If team members exist, proceed with check-in setup
+
+**Need help with team members?** Ask: "how do I add team members?"`;
+}
+
 export const checkInInfoAction: Action = {
   name: 'CHECK_IN_INFO',
   description:
-    'Provides information, guidance, and knowledge about setting up team check-in schedules. This action handles questions and requests for information about check-ins, not actual configuration.',
+    'Provides comprehensive information and guidance for setting up team check-in schedules. Educates users about the critical workflow requirements and edge cases, especially the importance of adding team members BEFORE setting up check-ins. Explains consequences of improper setup order and guides users to use the correct actions for each step. Handles Discord connection issues and provides complete check-in configuration guidance.',
   similes: [
     'CHECK_IN_HELP',
     'CHECKIN_HELP',
@@ -167,9 +213,11 @@ export const checkInInfoAction: Action = {
         logger.error(`Failed to get Discord client: ${discordError.message || 'Unknown error'}`);
 
         // Provide basic info without Discord channel data
+        const workflowGuidance = getWorkflowGuidance();
+        
         await callback(
           {
-            text: '❌ Unable to connect to Discord services, but I can still help!\n\n' +
+            text: `❌ **Discord Connection Issue**\n\nUnable to connect to Discord services, but I can still help!\n\n${workflowGuidance}\n\n` +
                   '📚 **Team Check-in Schedule Guide**\n\n' +
                   'I can help you set up automated check-ins for your team! Here\'s how it works:\n\n' +
                   '🎯 **Available Check-in Types:**\n' +
@@ -184,7 +232,8 @@ export const checkInInfoAction: Action = {
                   '• Weekly (same day each week)\n' +
                   '• Bi-weekly (every two weeks)\n' +
                   '• Monthly (same date each month)\n\n' +
-                  '💡 **Pro Tip:** All times are in UTC timezone, so plan accordingly for your team\'s location.',
+                  '💡 **Pro Tip:** All times are in UTC timezone, so plan accordingly for your team\'s location.\n\n' +
+                  '🔧 **To complete setup:** Try again when Discord connection is restored.',
           },
           []
         );
@@ -254,6 +303,9 @@ export const checkInInfoAction: Action = {
       });
       logger.info('Found existing config:', existingConfig);
 
+      // Include workflow guidance in all responses
+      const workflowGuidance = getWorkflowGuidance();
+
       if (!existingConfig) {
         // First ask for the report channel configuration
         logger.info('Asking user for report channel configuration');
@@ -266,7 +318,9 @@ export const checkInInfoAction: Action = {
         await callback(
           {
             text:
-              `Let's set up check-ins for your team members! 📅\n\n` +
+              `${workflowGuidance}\n\n` +
+              `📋 **Let's set up check-ins for your team members!** 📅\n\n` +
+              `**Step 1: Report Channel Configuration**\n` +
               `First, I need to know where to send the check-in updates when team members respond.\n\n` +
               `**Available channels:**\n${channelsList}\n\n` +
               `1️⃣ **Channel for Updates:** Which channel from the list above should the updates be posted once collected from users?\n\n` +
@@ -282,9 +336,9 @@ export const checkInInfoAction: Action = {
               `   • Daily\n` +
               `   • Weekly\n` +
               `   • Bi-weekly\n` +
-              `   • Monthly\n` +
-              `5️⃣ **Time:** What time should check-ins happen? (e.g., 9:00 AM UTC) - Please note all times will be in UTC timezone` +
-              `Please remember to type "Record Check-in details" when you're finished to save your configuration.`,
+              `   • Monthly\n\n` +
+              `5️⃣ **Time:** What time should check-ins happen? (e.g., 9:00 AM UTC) - Please note all times will be in UTC timezone\n\n` +
+              `📝 **When finished:** Type "Record Check-in details" to save your configuration.`,
             source: messageSource,
           },
           []
@@ -305,7 +359,9 @@ export const checkInInfoAction: Action = {
         await callback(
           {
             text:
-              `Let's set up your team check-in schedule! 📅\n\n` +
+              `${workflowGuidance}\n\n` +
+              `📋 **Let's set up your team check-in schedule!** 📅\n\n` +
+              `**Step 2: Check-in Schedule Configuration**\n` +
               `Please provide the following information (you can answer all at once or one by one):\n\n` +
               `1️⃣ **Check-in Type:** Choose one of the following:\n` +
               `   • Daily Standup\n` +
@@ -322,8 +378,8 @@ export const checkInInfoAction: Action = {
               `   • Bi-weekly\n` +
               `   • Monthly\n` +
               `   • Custom\n\n` +
-              `4️⃣ **Time:** What time should check-ins happen? (e.g., 9:00 AM UTC)` +
-              `Please remember to type "Record Check-in details" when you're finished to save your configuration.`,
+              `4️⃣ **Time:** What time should check-ins happen? (e.g., 9:00 AM UTC)\n\n` +
+              `📝 **When finished:** Type "Record Check-in details" to save your configuration.`,
             source: messageSource,
           },
           []
@@ -337,6 +393,15 @@ export const checkInInfoAction: Action = {
       logger.error('=== CHECK-IN INFO HANDLER ERROR ===');
       logger.error(`Error providing check-in information: ${err}`);
       logger.error(`Error stack: ${err.stack || 'No stack trace available'}`);
+      
+      if (callback) {
+        await callback(
+          {
+            text: '❌ An unexpected error occurred while providing check-in information. Please try again later.',
+          },
+          []
+        );
+      }
       return false;
     }
   },
@@ -351,7 +416,7 @@ export const checkInInfoAction: Action = {
       {
         name: '{{botName}}',
         content: {
-          text: "I'll explain how to set up team check-ins and walk you through the process.",
+          text: "I'll validate your team setup and walk you through the check-in configuration process.",
           actions: ['CHECK_IN_INFO'],
         },
       },
@@ -366,7 +431,7 @@ export const checkInInfoAction: Action = {
       {
         name: '{{botName}}',
         content: {
-          text: "I'll provide you with comprehensive information about team check-in schedules.",
+          text: "I'll provide comprehensive information about team check-in schedules and ensure your team is properly configured.",
           actions: ['CHECK_IN_INFO'],
         },
       },
@@ -381,7 +446,7 @@ export const checkInInfoAction: Action = {
       {
         name: '{{botName}}',
         content: {
-          text: "Let me explain the different types of check-ins you can set up for your team.",
+          text: "Let me explain the different types of check-ins and verify your team setup first.",
           actions: ['CHECK_IN_INFO'],
         },
       },
@@ -396,7 +461,7 @@ export const checkInInfoAction: Action = {
       {
         name: '{{botName}}',
         content: {
-          text: "I'll give you a complete guide on how team check-ins function.",
+          text: "I'll give you a complete guide on how team check-ins function and check your current setup.",
           actions: ['CHECK_IN_INFO'],
         },
       },
@@ -411,7 +476,52 @@ export const checkInInfoAction: Action = {
       {
         name: '{{botName}}',
         content: {
-          text: "I'll explain the check-in setup process and guide you through it.",
+          text: "I'll validate your team members and guide you through the check-in setup process.",
+          actions: ['CHECK_IN_INFO'],
+        },
+      },
+    ],
+    [
+      {
+        name: '{{name1}}',
+        content: {
+          text: 'I want to create daily check-ins but I think I need to add team members first',
+        },
+      },
+      {
+        name: '{{botName}}',
+        content: {
+          text: "Smart thinking! I'll check your team setup and guide you through the proper workflow.",
+          actions: ['CHECK_IN_INFO'],
+        },
+      },
+    ],
+    [
+      {
+        name: '{{name1}}',
+        content: {
+          text: 'Can you guide me through setting up automated team check-ins?',
+        },
+      },
+      {
+        name: '{{botName}}',
+        content: {
+          text: "I'll validate your prerequisites and provide step-by-step guidance for setting up check-ins.",
+          actions: ['CHECK_IN_INFO'],
+        },
+      },
+    ],
+    [
+      {
+        name: '{{name1}}',
+        content: {
+          text: 'What do I need before setting up check-ins?',
+        },
+      },
+      {
+        name: '{{botName}}',
+        content: {
+          text: "I'll check your current setup and explain all the prerequisites for successful check-ins.",
           actions: ['CHECK_IN_INFO'],
         },
       },

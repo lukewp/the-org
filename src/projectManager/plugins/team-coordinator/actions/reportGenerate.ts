@@ -195,7 +195,7 @@ export async function generateTeamReport(
 
 export const generateReport: Action = {
   name: 'GENERATE_REPORT',
-  description: 'Generates comprehensive reports of team member updates and productivity analysis for daily standups, sprint check-ins, project status, mental health check-ins, and team retrospectives. Use when user asks for reports, progress updates, team analysis, or wants to see how the team is doing.',
+  description: 'Generates comprehensive reports of team member updates and productivity analysis for daily standups, sprint check-ins, project status, mental health check-ins, and team retrospectives. Provides intelligent workflow guidance and educates users about critical prerequisites (team members must be added and have submitted updates BEFORE generating reports). Explains consequences of improper setup order and guides users to use the correct actions for each step. Use when user asks for reports, progress updates, team analysis, or wants to see how the team is doing.',
   similes: [
     'CREATE_REPORT',
     'TEAM_REPORT',
@@ -251,42 +251,110 @@ export const generateReport: Action = {
 
       // Use AI to parse the input text and extract standup type
       try {
-        const prompt = `Extract the standup type from this text. Try to understand the sentence and its context.
-        Return one of these values: STANDUP, SPRINT, MENTAL_HEALTH, PROJECT_STATUS, RETRO.
-        If you can't determine a specific type, use STANDUP as default.
-        
-        Text: "${text}"`;
+        const prompt = `CRITICAL: You must respond with ONLY one of these exact values: STANDUP, SPRINT, MENTAL_HEALTH, PROJECT_STATUS, RETRO
+
+Extract the check-in type from this user input. Look for keywords and context:
+
+User input: "${text}"
+
+Keyword mappings:
+- "standup", "daily standup", "daily", "stand up" → STANDUP
+- "sprint", "sprint check-in", "sprint review" → SPRINT  
+- "mental health", "mental", "wellness", "wellbeing" → MENTAL_HEALTH
+- "project status", "project", "status update", "progress" → PROJECT_STATUS
+- "retro", "retrospective", "team retrospective" → RETRO
+- "report" (generic) → STANDUP
+
+If no specific type is mentioned or just "report", default to STANDUP.
+
+Respond with ONLY the exact type value:`;
 
         const parsedType = await runtime.useModel(ModelType.TEXT_LARGE, {
           prompt,
           stopSequences: [],
         });
 
-        logger.info('AI parsed standup type:', parsedType);
+        const cleanedType = parsedType.trim().toUpperCase();
+        logger.info('AI parsed standup type:', cleanedType);
 
-        if (!state.standupType && !parsedType) {
-          logger.info('Asking for standup type');
-          const template = `Please select a check-in type:
-          - Daily Standup (STANDUP)
-          - Sprint Check-in (SPRINT) 
-          - Mental Health Check-in (MENTAL_HEALTH)
-          - Project Status Update (PROJECT_STATUS)
-          - Team Retrospective (RETRO)`;
+        // Map AI response to our internal format
+        const typeMapping: Record<string, string> = {
+          'STANDUP': 'standup',
+          'SPRINT': 'sprint', 
+          'MENTAL_HEALTH': 'mental_health',
+          'PROJECT_STATUS': 'project_status',
+          'RETRO': 'retro'
+        };
 
-          const promptContent: Content = {
-            text: template,
-            source: 'discord',
-          };
-          await callback(promptContent, []);
-          return true;
+        standupType = typeMapping[cleanedType] || 'standup';
+        logger.info('Mapped to internal type:', standupType);
+
+        // Enhanced user guidance based on prompt_confused.md
+        function getWorkflowGuidance(): string {
+          return `🔍 **IMPORTANT: Report Generation Workflow**
+
+**⚠️ CRITICAL PREREQUISITE:** Team members must be added and have submitted updates
+
+**Why this matters:**
+- Reports are only useful when team members have submitted their updates
+- Empty reports provide no value and waste your time
+- Without team members configured, check-ins can't be collected
+
+**📋 PROPER WORKFLOW (Follow This Order):**
+
+**STEP 1: Add Team Members** 🛠️ **(REQUIRED FIRST)**
+\`\`\`
+Add [Name] to [Section] with discord @username
+\`\`\`
+
+**STEP 2: Configure Check-ins** (After adding team members)
+\`\`\`
+Setup check-in schedule for [frequency] at [time]
+\`\`\`
+
+**STEP 3: Collect Updates** (After team members submit)
+\`\`\`
+Team members submit their updates via check-in process
+\`\`\`
+
+**STEP 4: Generate Report** (After updates are collected)
+\`\`\`
+Generate me a report for [type]
+\`\`\`
+
+**✅ Verify Your Setup:**
+- Use \`list team members\` to check if you have team members configured
+- Verify team members have submitted recent updates
+- Check that the report type matches your needs
+
+**Need help with team setup?** Ask: "How do I add team members?"`;
         }
 
-        standupType = ((state.standupType as string) || parsedType)?.toLowerCase()?.trim();
-
-        logger.info('Generating report with parameters:', {
-          standupType,
-          roomId: message.roomId,
+        // Check if we have team members configured (basic check)
+        const allMemories = await runtime.getMemories({
+          tableName: 'messages',
+          agentId: runtime.agentId,
         });
+
+        const teamMemberUpdates = allMemories.filter((memory) => {
+          const content = memory.content as {
+            type?: string;
+            update?: TeamMemberUpdate;
+          };
+          return content?.type === 'team-member-update';
+        });
+
+        if (teamMemberUpdates.length === 0) {
+          const workflowGuidance = getWorkflowGuidance();
+          await callback(
+            {
+              text: `${workflowGuidance}\n\n**🚨 Current Issue:** No team member updates found. You need to add team members and collect their updates before generating meaningful reports.`,
+              source: 'discord',
+            },
+            []
+          );
+          return true;
+        }
 
         // Validate standup type with more flexible matching
         const validTypes = ['standup', 'sprint', 'mental_health', 'project_status', 'retro'];
@@ -295,7 +363,21 @@ export const generateReport: Action = {
         if (!isValidType) {
           await callback(
             {
-              text: 'Invalid check-in type. Please select one of: Daily Standup, Sprint Check-in, Mental Health Check-in, Project Status Update, or Team Retrospective',
+              text: `🔍 **Report Type Options:**
+              
+**Available Report Types:**
+- 📊 **Daily Standup** - Regular team updates and progress
+- 🏃 **Sprint Check-in** - Sprint-specific progress and blockers  
+- 💚 **Mental Health Check-in** - Team wellness and support needs
+- 📈 **Project Status Update** - Project milestones and deliverables
+- 🔄 **Team Retrospective** - Team reflection and improvement areas
+
+**Examples:**
+- \`Generate me a report for daily standup\`
+- \`Show me the sprint progress report\`
+- \`Create a mental health check-in report\`
+
+**Need help choosing?** Daily Standup is most common for regular team updates.`,
               source: 'discord',
             },
             []
@@ -304,14 +386,9 @@ export const generateReport: Action = {
         }
       } catch (aiError) {
         logger.error('Error using AI to parse input:', aiError);
-        await callback(
-          {
-            text: "I couldn't understand the check-in type. Please try again with a valid type.",
-            source: 'discord',
-          },
-          []
-        );
-        return false;
+        // Fallback to default standup type instead of failing
+        standupType = 'standup';
+        logger.info('Using default standup type due to AI error');
       }
 
       // Generate the report
@@ -361,7 +438,20 @@ export const generateReport: Action = {
     [
       {
         name: '{{name1}}',
-        content: { text: 'Generate a daily standup report' },
+        content: { text: 'generate me a report for daily standup' },
+      },
+      {
+        name: '{{botName}}',
+        content: {
+          text: "",
+          actions: ['GENERATE_REPORT'],
+        },
+      },
+    ],
+    [
+      {
+        name: '{{name1}}',
+        content: { text: 'generate me a report' },
       },
       {
         name: '{{botName}}',
@@ -387,12 +477,25 @@ export const generateReport: Action = {
     [
       {
         name: '{{name1}}',
-        content: { text: 'team report' },
+        content: { text: 'I want to see a report but I think I need to add team members first' },
       },
       {
         name: '{{botName}}',
         content: {
-          text: "",
+          text: "Smart thinking! I'll check your setup and guide you through the proper workflow.",
+          actions: ['GENERATE_REPORT'],
+        },
+      },
+    ],
+    [
+      {
+        name: '{{name1}}',
+        content: { text: 'What do I need before generating a report?' },
+      },
+      {
+        name: '{{botName}}',
+        content: {
+          text: "I'll explain all the prerequisites and guide you through the setup.",
           actions: ['GENERATE_REPORT'],
         },
       },
@@ -414,32 +517,6 @@ export const generateReport: Action = {
       {
         name: '{{name1}}',
         content: { text: 'How is the team doing?' },
-      },
-      {
-        name: '{{botName}}',
-        content: {
-          text: "",
-          actions: ['GENERATE_REPORT'],
-        },
-      },
-    ],
-    [
-      {
-        name: '{{name1}}',
-        content: { text: 'get team updates' },
-      },
-      {
-        name: '{{botName}}',
-        content: {
-          text: "",
-          actions: ['GENERATE_REPORT'],
-        },
-      },
-    ],
-    [
-      {
-        name: '{{name1}}',
-        content: { text: 'show progress report' },
       },
       {
         name: '{{botName}}',

@@ -93,20 +93,77 @@ async function postUpdateToDiscordChannel(
     const guilds = discordService.client.guilds.cache;
     logger.info(`Found ${guilds.size} Discord servers`);
 
-    // Find the guild that matches the server name exactly
+    // Find the guild that matches the server name using AI-powered smart matching
     let targetGuild: { name: string; id: string; channels: any } | null = null;
+    
+    // Collect all guild names for AI matching
+    const guildNames: string[] = [];
+    const guildMap = new Map<string, any>();
+    
     for (const guild of guilds.values()) {
-      logger.info(`Checking guild: ${guild.name} against update server name: ${update.serverName}`);
+      guildNames.push(guild.name);
+      guildMap.set(guild.name, guild);
+      logger.info(`Available guild: ${guild.name}`);
+    }
+    
+    if (guildNames.length === 0) {
+      logger.warn('No Discord servers found');
+      return false;
+    }
+    
+    // Try exact match first
+    for (const guild of guilds.values()) {
       if (guild.name === update.serverName) {
         targetGuild = guild;
-        logger.info(`Found matching guild: ${guild.name} with ID: ${guild.id}`);
+        logger.info(`Found exact match guild: ${guild.name} with ID: ${guild.id}`);
         break;
       }
     }
-
+    
+    // If no exact match, use AI to find the best match
     if (!targetGuild) {
-      logger.warn(`Could not find Discord server matching exact name: ${update.serverName}`);
-      return false;
+      try {
+        logger.info(`No exact match found, using AI to match server name: ${update.serverName}`);
+        
+        const aiPrompt = `You are a smart server name matcher. Given a target server name and a list of available Discord server names, find the best match.
+
+Target server name: "${update.serverName}"
+
+Available Discord server names:
+${guildNames.map((name, index) => `${index + 1}. ${name}`).join('\n')}
+
+Rules:
+- Look for exact matches first
+- Consider partial matches (target name contained in server name or vice versa)
+- Handle case variations
+- Consider common abbreviations or shortened versions
+- If target is "IntelliChains" and server is "IntelliChains - blockchain", that's a match
+
+Return ONLY the exact server name from the list that best matches the target, or "NO_MATCH" if no reasonable match exists.
+
+Response:`;
+
+        const aiResponse = await runtime.useModel(ModelType.TEXT_LARGE, {
+          prompt: aiPrompt,
+          stopSequences: [],
+        });
+
+        const matchedServerName = aiResponse.trim();
+        logger.info(`AI matched server name: ${matchedServerName}`);
+        
+        if (matchedServerName !== 'NO_MATCH' && guildMap.has(matchedServerName)) {
+          targetGuild = guildMap.get(matchedServerName);
+          logger.info(`Found AI-matched guild: ${targetGuild.name} with ID: ${targetGuild.id}`);
+        } else {
+          logger.warn(`AI could not find a suitable match for server name: ${update.serverName}`);
+          logger.warn(`Available servers: ${guildNames.join(', ')}`);
+          return false;
+        }
+      } catch (error) {
+        logger.error('Error during AI server name matching:', error);
+        logger.warn(`Could not find Discord server matching name: ${update.serverName}`);
+        return false;
+      }
     }
 
     // Find config for this server
