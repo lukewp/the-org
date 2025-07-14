@@ -143,8 +143,16 @@ function validateTeamMemberInput(input: string): {
 
   const inputLower = input.toLowerCase();
 
-  // Check if user is asking for help
-  if (inputLower.includes('help') || inputLower.includes('how') || inputLower.includes('format') || inputLower.includes('example') || inputLower.includes('guide')) {
+  // Check if user is asking for help (but not if they're specifying a custom format)
+  const isHelpRequest = (
+    inputLower.includes('help') || 
+    inputLower.includes('how do i') || 
+    inputLower.includes('how to') ||
+    inputLower.includes('example') || 
+    inputLower.includes('guide')
+  ) && !inputLower.includes('format:');
+
+  if (isHelpRequest) {
     return {
       isValid: false,
       error: '📚 Here\'s your complete guide to adding team members:',
@@ -153,12 +161,15 @@ function validateTeamMemberInput(input: string): {
     };
   }
 
-  // Check for @ symbol presence
-  if (!inputLower.includes('@')) {
+  // Check for username presence (either @username or username (@id) format)
+  const hasAtSymbol = inputLower.includes('@');
+  const hasUsernameWithId = /\w+\s*\(@\d+\)/.test(inputLower);
+  
+  if (!hasAtSymbol && !hasUsernameWithId) {
     return {
       isValid: false,
-      error: '❌ Missing @ symbol. Username must include @ symbol (e.g., @username).',
-      errorType: 'missing_at_symbol'
+      error: '❌ Missing username. Use @username or tag the user directly.',
+      errorType: 'missing_username'
     };
   }
 
@@ -185,24 +196,29 @@ function validateTeamMemberInput(input: string): {
     };
   }
 
-  // Check for valid format patterns
-  const hasValidFormat1 = /add\s+\w+\s+to\s+\w+\s+with\s+(discord|telegram)\s+@\w+/i.test(input);
-  const hasValidFormat2 = /section:\s*\w+.*\n.*(discord|telegram):\s*@\w+/i.test(input);
-  const hasValidFormat3 = /section.*\w+.*(discord|telegram).*@\w+/i.test(input);
+  // Check for valid format patterns (handle both @username and username (@id) formats)
+  const hasValidFormat1 = /add\s+\w+\s+to\s+[\w\s]+\s+with\s+(discord|telegram)\s+(@[\w\s]+|\w+\s*\(@\d+\))/i.test(input);
+  const hasValidFormat2 = /section:\s*\w+.*\n.*(discord|telegram):\s*(@[\w\s]+|\w+\s*\(@\d+\))/i.test(input);
+  const hasValidFormat3 = /section.*\w+.*(discord|telegram).*(@[\w\s]+|\w+\s*\(@\d+\))/i.test(input);
 
   if (!hasValidFormat1 && !hasValidFormat2 && !hasValidFormat3) {
     return {
       isValid: false,
-      error: '❌ Invalid format. Please use one of the exact formats specified in the guide.',
+      error: '❌ Invalid format. Use: Add [Name] to [Section] with discord @username',
       errorType: 'invalid_format'
     };
   }
 
-  // Check for common mistakes
-  if (input.includes(' ') && input.includes('@') && input.split('@')[1]?.includes(' ')) {
+  // Check for common mistakes - handle both @username and username (@id) formats
+  const atUsernameMatch = input.match(/@([^,\n\s]+)/);
+  const taggedUsernameMatch = input.match(/(\w+)\s*\(@\d+\)/);
+  
+  const username = atUsernameMatch ? atUsernameMatch[1] : (taggedUsernameMatch ? taggedUsernameMatch[1] : null);
+  
+  if (username && username.length < 2) {
     return {
       isValid: false,
-      error: '❌ Username cannot contain spaces. Use the exact Discord/Telegram username.',
+      error: '❌ Username too short. Use the exact Discord/Telegram username.',
       errorType: 'username_spaces'
     };
   }
@@ -266,58 +282,29 @@ async function validateUserPresence(
  */
 function getDetailedErrorMessage(errorType: string): string {
   switch (errorType) {
-    case 'missing_at_symbol':
-      return `❌ **Missing @ Symbol**
-      
-**Required:** Username must include @ symbol
-**Example:** @stan0473 (not stan0473)
-**How to fix:** Add @ before the username`;
+    case 'missing_username':
+      return `❌ Missing username. Use: @username or tag the user`;
 
     case 'missing_platform':
-      return `❌ **Missing Platform Specification**
-      
-**Required:** Must specify 'discord' or 'telegram'
-**Example:** "with discord @username" or "with telegram @username"
-**How to fix:** Add platform specification to your message`;
+      return `❌ Missing platform. Use: "with discord @username"`;
 
     case 'missing_section':
-      return `❌ **Missing Section/Role**
-      
-**Required:** Must specify which section to add user to
-**Example:** "Add [Name] to Development" or "Section: Marketing"
-**How to fix:** Specify the section/role name`;
+      return `❌ Missing section. Use: "Add [Name] to [Section]"`;
 
     case 'invalid_format':
-      return `❌ **Invalid Format**
-      
-**Required:** Must use one of the exact formats:
-• Add [Name] to [Section] with discord @username
-• Section: [SectionName]\\nDiscord: @username
-**How to fix:** Copy and modify one of the exact formats above`;
+      return `❌ Invalid format. Use: "Add [Name] to [Section] with discord @username"`;
 
     case 'username_spaces':
-      return `❌ **Username Contains Spaces**
-      
-**Issue:** Usernames cannot contain spaces
-**Example:** @john doe (wrong) → @johndoe (correct)
-**How to fix:** Use the exact Discord username without spaces`;
+      return `❌ Username issue. Use exact Discord username`;
 
     case 'invalid_username':
-      return `❌ **Invalid Username**
-      
-**Issue:** Username must be at least 2 characters long
-**How to fix:** Use the complete Discord username`;
+      return `❌ Username too short. Use complete Discord username`;
 
     case 'username_format':
-      return `❌ **Incorrect Username Format**
-      
-**Issue:** Don't use display names or discriminators
-**Wrong:** @John Smith#1234 or @John Smith
-**Correct:** @johnsmith
-**How to fix:** Use only the Discord username (the one that appears after @)`;
+      return `❌ Use Discord username only (not display name)`;
 
     default:
-      return '❌ **Unknown Error**\\n\\nPlease check the format and try again.';
+      return '❌ Format error. Use: Add [Name] to [Section] with discord @username';
   }
 }
 
@@ -326,29 +313,20 @@ function getDetailedErrorMessage(errorType: string): string {
  * @returns Quick format reminder string
  */
 function getQuickFormatReminder(): string {
-  return `🚀 **Quick Format Reminder:**
-
-**Most common format:**
+  return `🚀 **Format:**
 \`Add [Name] to [Section] with discord @username\`
+OR
+\`Add [Name] to [Section] with discord username\` (tag the user)
 
-**With custom update format:**
+**With custom format:**
 \`Add [Name] to [Section] with discord @username
 Format: Question1, Question2, Question3\`
 
 **Examples:**
 \`Add John to Development with discord @john123\`
-\`Add Sarah to Marketing with discord @sarah456
-Format: Campaign results?, Content created?, Next priorities?\`
+\`Add Sam to Software team with discord samdeveloper\` (when tagging)
 
-**Requirements:**
-• User must be in this Discord server
-• Use exact Discord username with @
-• Specify section/role name
-• Update format is optional (default will be used if not specified)
-
-**Default update format:** What did you accomplish this week?, What are your priorities for next week?, Any blockers or challenges?
-
-**Need full guide?** Ask "how to add team members"`;
+**Need help?** Ask "how to add team members"`;
 }
 
 /**
@@ -356,90 +334,42 @@ Format: Campaign results?, Content created?, Next priorities?\`
  * @returns Formatted string with detailed instructions
  */
 function getFormatExamples(): string {
-  return `📋 **TEAM MEMBER ADDITION REQUIREMENTS**
+  return `📋 **TEAM MEMBER ADDITION GUIDE**
 
-**⚠️ PREREQUISITES (MUST READ):**
-1. **User must be in this Discord server** - Bot cannot access users not in the server
-2. **Use exact Discord username** - Copy from user's profile or member list
-3. **Include @ symbol** - Always use @username format
-4. **Admin permissions** - Only server admins can add team members
-5. **Case sensitive** - Username must match exactly
+**📝 FORMATS:**
 
-**📝 EXACT FORMAT REQUIREMENTS:**
-
-**Format 1 - Simple Addition (uses default update format):**
+**Basic (Method 1):**
 \`Add [Name] to [Section] with discord @username\`
 
-**Format 2 - With Custom Update Format:**
+**Basic (Method 2 - Tag user):**
+\`Add [Name] to [Section] with discord username\` (tag the user when typing)
+
+**With Custom Questions:**
 \`Add [Name] to [Section] with discord @username
 Format: Question1, Question2, Question3\`
 
-**Format 3 - Detailed Addition:**
-\`Section: [SectionName]
-Discord: @username
-Format: Question1, Question2, Question3\`
+**✅ EXAMPLES:**
+\`Add Stan to Development with discord @stan0473\`
+\`Add Sam to Software team with discord samdeveloper\` (when tagging)
+\`Add John to Marketing with discord @john123
+Format: What did you ship?, Next priorities?, Any blockers?\`
 
-**Format 4 - Telegram Addition:**
-\`Add [Name] to [Section] with telegram @username\`
-
-**✅ WORKING EXAMPLES:**
-
-**Simple (default format will be used):**
-• \`Add Stan to Development with discord @stan0473\`
-• \`Add Sarah to Marketing with telegram @sarah_m\`
-
-**With custom update format:**
-• \`Add John to DevRel with discord @john123
-Format: What did you ship this week?, What's your focus for next week?, Any blockers?\`
-
-• \`Section: Operations
-Discord: @user456
-Format: Weekly accomplishments, Upcoming priorities, Team collaboration updates\`
-
-**🔄 DEFAULT UPDATE FORMAT:**
-If you don't specify a format, this default will be used:
+**🔄 DEFAULT QUESTIONS:**
 • What did you accomplish this week?
 • What are your priorities for next week?
 • Any blockers or challenges?
 
-**📝 CUSTOM UPDATE FORMAT EXAMPLES:**
-• **Development Team:** "What features did you complete?, What bugs did you fix?, Code review priorities?"
-• **Marketing Team:** "Campaign results this week?, Content created?, Upcoming launches?"
-• **Design Team:** "Designs completed?, User feedback incorporated?, Next design priorities?"
-• **Operations Team:** "Process improvements?, System updates?, Team support provided?"
+**⚠️ REQUIREMENTS:**
+• User must be in this Discord server
+• Use exact Discord username (with @ or tag them)
+• Include section/role name
 
-**🚨 EDGE CASES & TROUBLESHOOTING:**
+**🚨 TROUBLESHOOTING:**
+• **User not found:** Check they're in server, verify username
+• **Permission denied:** Only admins can add team members
+• **Duplicate user:** Use \`list team members\` to check existing
 
-**If you get "user not found" error:**
-• Check if user is in this Discord server
-• Verify exact username spelling (case sensitive)
-• Ensure @ symbol is included
-• User must have sent at least one message in server
-
-**If you get "permission denied" error:**
-• Only server admins can add team members
-• Ask server admin to add the user
-
-**If you get "duplicate user" error:**
-• User is already in the team
-• Use \`list team members\` to see current members
-
-**Valid Section Names:**
-• Development, DevRel, Marketing, Operations, Design, QA, Management, Support, Community, Content, etc.
-
-**❌ COMMON MISTAKES TO AVOID:**
-• Don't use display names - use @username
-• Don't forget @ symbol
-• Don't add users not in the server
-• Don't use spaces in usernames
-• Don't use nicknames instead of actual usernames
-
-**💡 PRO TIPS:**
-• Right-click user in Discord → Copy Username
-• Use Discord member list to verify usernames
-• Specify custom update format for better team coordination
-• Test with one user first before adding multiple
-• Keep section names consistent across team`;
+**💡 TIP:** Right-click user in Discord → Copy Username OR just tag them when typing`;
 }
 
 // Default update format to use when user doesn't specify one
@@ -551,7 +481,7 @@ export const addTeamMemberAction: Action = {
           const detailedError = getDetailedErrorMessage(validationResult.errorType);
           
           // Use quick reminder for simple format issues, full guide for complex issues
-          const isSimpleFormatIssue = ['missing_at_symbol', 'missing_platform', 'username_spaces'].includes(validationResult.errorType);
+          const isSimpleFormatIssue = ['missing_username', 'missing_platform', 'username_spaces'].includes(validationResult.errorType);
           const additionalHelp = isSimpleFormatIssue ? getQuickFormatReminder() : getFormatExamples();
           
           await callback(
@@ -573,9 +503,11 @@ export const addTeamMemberAction: Action = {
       }
 
       // Additional validation for user presence (extract username from input for validation)
-      const usernameMatch = userText.match(/@(\w+)/);
-      if (usernameMatch) {
-        const username = usernameMatch[1];
+      const atUsernameMatch = userText.match(/@([^,\n\s]+)/);
+      const taggedUsernameMatch = userText.match(/(\w+)\s*\(@\d+\)/);
+      const username = atUsernameMatch ? atUsernameMatch[1] : (taggedUsernameMatch ? taggedUsernameMatch[1] : null);
+      
+      if (username) {
         const userPresenceValidation = await validateUserPresence(runtime, `@${username}`, serverId);
         if (!userPresenceValidation.isValid) {
           logger.warn(`User presence validation failed: ${userPresenceValidation.error}`);
@@ -615,7 +547,9 @@ export const addTeamMemberAction: Action = {
 
         Rules:
         - Extract section/role name from context
-        - Include @ symbol with usernames
+        - For usernames: Handle both "@username" and "username (@discordId)" formats
+        - Always store usernames WITH @ symbol (e.g., "@john123")
+        - If input has "username (@discordId)", extract just "username" and add @ symbol
         - Leave tgName empty if not mentioned
         - Leave discordName empty if not mentioned
         - Parse update format questions into array (if "Format:" is mentioned)
@@ -626,8 +560,11 @@ export const addTeamMemberAction: Action = {
         Input: "Add John to Development with discord @john123"
         Output: [{"section": "Development", "discordName": "@john123", "updatesFormat": []}]
 
-        Input: "Add Sarah to Marketing with discord @sarah456\\nFormat: Campaign results?, Content created?, Next priorities?"
-        Output: [{"section": "Marketing", "discordName": "@sarah456", "updatesFormat": ["Campaign results?", "Content created?", "Next priorities?"]}]
+        Input: "Add Sarah to Marketing with discord sarah456 (@123456789)"
+        Output: [{"section": "Marketing", "discordName": "@sarah456", "updatesFormat": []}]
+
+        Input: "Add Sam to Software team with discord samdeveloper (@528388627135201292)"
+        Output: [{"section": "Software team", "discordName": "@samdeveloper", "updatesFormat": []}]
 
         Text to parse: "${userText}"`;
 
@@ -643,15 +580,25 @@ export const addTeamMemberAction: Action = {
         // Parse the response
         let teamMembers: TeamMember[] = [];
         try {
-          const cleanedResponse = parsedResponse.replace(/```json\n?|\n?```/g, '').trim();
+          const cleanedResponse = parsedResponse
+            .replace(/```json\n?|\n?```/g, '')
+            .replace(/^ADD_TEAM_MEMBER\s*/, '')
+            .trim();
           const parsedData = JSON.parse(cleanedResponse);
 
-          // Fix: Ensure teamMembers is an array
-          if (!Array.isArray(parsedData)) {
-            logger.warn('Parsed response is not an array, converting to array');
-            teamMembers = [parsedData as TeamMember];
-          } else {
+          // Handle structured response from AI
+          if (parsedData.action === 'ADD_TEAM_MEMBER' && parsedData.data && Array.isArray(parsedData.data)) {
+            teamMembers = parsedData.data as TeamMember[];
+            logger.info('Extracted team members from structured response:', teamMembers);
+          } else if (parsedData.members && Array.isArray(parsedData.members)) {
+            teamMembers = parsedData.members as TeamMember[];
+            logger.info('Extracted team members from members array:', teamMembers);
+          } else if (Array.isArray(parsedData)) {
             teamMembers = parsedData as TeamMember[];
+            logger.info('Using direct array response:', teamMembers);
+          } else {
+            teamMembers = [parsedData as TeamMember];
+            logger.info('Converting single object to array:', teamMembers);
           }
 
           logger.info('Successfully parsed team member configuration:', teamMembers);
