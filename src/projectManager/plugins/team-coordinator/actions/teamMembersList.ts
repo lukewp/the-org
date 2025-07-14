@@ -32,9 +32,105 @@ function getStorageRoomId(runtime: IAgentRuntime, serverId: string): UUID {
   return createUniqueUuid(runtime, `store-team-members-${serverHash}`);
 }
 
+/**
+ * Provides comprehensive workflow guidance for team member management
+ * Following prompt_confused.md principles for user education
+ */
+function getTeamMemberWorkflowGuidance(): string {
+  return `🔍 **IMPORTANT: Team Member Management Workflow**
+
+**⚠️ CRITICAL PREREQUISITE:** Team members are the foundation of all project management features
+
+**Why this matters:**
+- Without team members, check-ins will have no recipients
+- Reports will be empty and provide no value
+- Update tracking cannot function properly
+- All other features depend on having a configured team
+
+**📋 PROPER WORKFLOW (Follow This Order):**
+
+**STEP 1: Add Team Members** 🛠️ **(START HERE)**
+\`\`\`
+Add [Name] to [Section] with discord @username
+\`\`\`
+**Examples:**
+\`\`\`
+Add John to Development with discord @john123
+Add Sarah to Marketing with discord @sarah456
+Format: Daily goals?, Blockers?, Next priorities?
+\`\`\`
+
+**STEP 2: Configure Check-ins** (After adding team members)
+\`\`\`
+Setup check-in schedule for [frequency] at [time]
+\`\`\`
+
+**STEP 3: Team Members Submit Updates** (Once check-ins are configured)
+\`\`\`
+Team members will receive automated check-in prompts
+\`\`\`
+
+**STEP 4: Generate Reports** (After updates are collected)
+\`\`\`
+Generate me a report for daily standup
+\`\`\`
+
+**✅ Verify Your Setup:**
+- Use \`list team members\` to see current team configuration
+- Check that team members have Discord/Telegram usernames
+- Verify custom update formats are configured if needed
+
+**💡 QUICK TIPS:**
+- **Right-click user in Discord** → Copy Username for exact @username
+- **Tag users directly** when adding them for automatic username detection
+- **Custom formats** let you tailor questions for each team member's role
+
+**Need help adding team members?** Ask: "How do I add team members?"`;
+}
+
+/**
+ * Provides next steps guidance when team members exist
+ */
+function getNextStepsGuidance(teamMemberCount: number): string {
+  return `
+
+**🚀 What's Next? (You have ${teamMemberCount} team member${teamMemberCount > 1 ? 's' : ''} configured)**
+
+**Available Actions:**
+- **📝 Add More Members:** \`Add [Name] to [Section] with discord @username\`
+- **⏰ Setup Check-ins:** \`Setup daily check-in schedule at 9:00 AM\`
+- **📊 Generate Reports:** \`Generate me a report for daily standup\`
+- **🔄 View Updates:** \`Show me team updates\`
+
+**👀 Monitor Team Activity:**
+- Check-in schedules will automatically prompt team members
+- Updates will be collected and stored for reporting
+- Generate reports to track team productivity and blockers
+
+**💡 Pro Tips:**
+- Regular check-ins keep teams aligned and productive
+- Custom update formats help gather role-specific information
+- Reports provide insights into team velocity and impediments`;
+}
+
+/**
+ * Provides enhanced empty state guidance with actionable next steps
+ */
+function getEmptyStateGuidance(): string {
+  return `**🚨 Current Issue:** No team members found. This means other features won't work properly.
+
+**⚠️ What happens without team members:**
+- Check-ins will be created but no one will receive them
+- Reports will be empty and provide no insights
+- Update tracking cannot collect any data
+- Team coordination features will be non-functional
+
+${getTeamMemberWorkflowGuidance()}`;
+}
+
 export const listTeamMembersAction: Action = {
   name: 'LIST_TEAM_MEMBERS',
-  description: 'List all team members that have been registered in the system.',
+  description: 'Lists all registered team members and provides comprehensive workflow guidance. Educates users about critical team management prerequisites and explains the connection between team members and other features like check-ins, reports, and updates. When the team list is empty, guides users through the proper setup workflow with exact commands and clear next steps.',
   similes: ['LIST_TEAM_MEMBERS', 'SHOW_TEAM', 'VIEW_MEMBERS', 'GET_TEAM_LIST', 'DISPLAY_TEAM'],
   validate: async (runtime: IAgentRuntime, message: Memory, state: State | undefined): Promise<boolean> => {
     try {
@@ -126,9 +222,10 @@ export const listTeamMembersAction: Action = {
 
       if (!teamMembersConfig || !teamMembersConfig.content?.config) {
         logger.info('No team members found for this server');
+        const emptyStateGuidance = getEmptyStateGuidance();
         await callback(
           {
-            text: '📋 No team members have been registered yet for this server.',
+            text: emptyStateGuidance,
           },
           []
         );
@@ -141,9 +238,10 @@ export const listTeamMembersAction: Action = {
       logger.info(`Found ${teamMembers.length} team members for server ${serverId}`);
 
       if (teamMembers.length === 0) {
+        const emptyStateGuidance = getEmptyStateGuidance();
         await callback(
           {
-            text: '📋 No team members have been registered yet for this server.',
+            text: emptyStateGuidance,
           },
           []
         );
@@ -160,32 +258,52 @@ export const listTeamMembersAction: Action = {
         sectionMap.get(section)?.push(member);
       });
 
-      // Format the response
-      let responseText =
-        '📋 **Team Members**\n\nHere is the list of team members involved in our current projects:\n\n';
+      // Format the response with enhanced team information
+      let responseText = `📋 **Team Members Overview**
 
-      // Flat list of team members in requested format
-      const formattedMembers = teamMembers
-        .map((member) => {
-          let memberLine = `Section: ${member.section}`;
+**🎯 ${teamMembers.length} Team Member${teamMembers.length > 1 ? 's' : ''} Configured**
 
-          if (member.tgName) {
-            memberLine += ` | Telegram: ${member.tgName}`;
-          } else if (member.discordName) {
-            memberLine += ` | Discord: ${member.discordName}`;
+`;
+
+      // Group by section for better organization
+      const sectionGroups = new Map<string, TeamMember[]>();
+      teamMembers.forEach((member) => {
+        const section = member.section || 'Unassigned';
+        if (!sectionGroups.has(section)) {
+          sectionGroups.set(section, []);
+        }
+        sectionGroups.get(section)?.push(member);
+      });
+
+      // Display by sections
+      for (const [section, members] of sectionGroups) {
+        responseText += `**📂 ${section} (${members.length} member${members.length > 1 ? 's' : ''})**\n`;
+        
+        members.forEach((member, index) => {
+          let memberLine = `${index + 1}. `;
+          
+          if (member.discordName) {
+            memberLine += `Discord: ${member.discordName}`;
+          } else if (member.tgName) {
+            memberLine += `Telegram: ${member.tgName}`;
           }
 
           if (member.updatesFormat && member.updatesFormat.length > 0) {
-            memberLine += ` | Update Fields: ${member.updatesFormat.join(', ')}`;
+            memberLine += `\n   📝 Custom Update Format: ${member.updatesFormat.join(', ')}`;
+          } else {
+            memberLine += `\n   📝 Using default update format`;
           }
 
-          return memberLine;
-        })
-        .join('\n');
+          responseText += `   ${memberLine}\n`;
+        });
+        responseText += '\n';
+      }
 
-      responseText = responseText + formattedMembers;
+      // Add workflow guidance
+      const nextStepsGuidance = getNextStepsGuidance(teamMembers.length);
+      responseText += nextStepsGuidance;
 
-      // Send the response
+      // Send the enhanced response
       await callback(
         {
           text: responseText.trim(),
@@ -204,7 +322,19 @@ export const listTeamMembersAction: Action = {
       if (callback) {
         await callback(
           {
-            text: '❌ An unexpected error occurred while retrieving team members. Please try again later.',
+            text: `❌ **Unable to retrieve team members right now.**
+
+**🔧 What you can try:**
+1. **Wait a moment** and try again - this might be a temporary issue
+2. **Check your setup** by asking: "How do I add team members?"
+3. **Add team members first** if you haven't yet: \`Add [Name] to [Section] with discord @username\`
+
+**💡 If this problem persists:**
+- Ensure you're in the correct Discord server
+- Verify your permissions for this server
+- Contact support with this error information
+
+**Need immediate help?** Ask: "How do I add team members?" to get started.`,
           },
           []
         );
@@ -223,7 +353,22 @@ export const listTeamMembersAction: Action = {
       {
         name: '{{botName}}',
         content: {
-          text: "Here's a list of all registered team members",
+          text: "I'll show you all team members and guide you through next steps",
+          actions: ['LIST_TEAM_MEMBERS'],
+        },
+      },
+    ],
+    [
+      {
+        name: '{{name1}}',
+        content: {
+          text: 'list team members',
+        },
+      },
+      {
+        name: '{{botName}}',
+        content: {
+          text: "Here's your team overview with workflow guidance",
           actions: ['LIST_TEAM_MEMBERS'],
         },
       },
@@ -238,7 +383,37 @@ export const listTeamMembersAction: Action = {
       {
         name: '{{botName}}',
         content: {
-          text: "I'll show you the team members list",
+          text: "I'll show you the team members and explain what you can do next",
+          actions: ['LIST_TEAM_MEMBERS'],
+        },
+      },
+    ],
+    [
+      {
+        name: '{{name1}}',
+        content: {
+          text: 'I want to see my team but I think I need to add people first',
+        },
+      },
+      {
+        name: '{{botName}}',
+        content: {
+          text: "Smart thinking! I'll check your team setup and guide you through the process",
+          actions: ['LIST_TEAM_MEMBERS'],
+        },
+      },
+    ],
+    [
+      {
+        name: '{{name1}}',
+        content: {
+          text: 'What team members do I have and what should I do next?',
+        },
+      },
+      {
+        name: '{{botName}}',
+        content: {
+          text: "I'll show your team status and provide clear next steps for team management",
           actions: ['LIST_TEAM_MEMBERS'],
         },
       },
@@ -253,7 +428,22 @@ export const listTeamMembersAction: Action = {
       {
         name: '{{botName}}',
         content: {
-          text: "Here's the team organization by section",
+          text: "Here's your team organization with workflow guidance",
+          actions: ['LIST_TEAM_MEMBERS'],
+        },
+      },
+    ],
+    [
+      {
+        name: '{{name1}}',
+        content: {
+          text: 'show team',
+        },
+      },
+      {
+        name: '{{botName}}',
+        content: {
+          text: "I'll display your team members and explain next steps",
           actions: ['LIST_TEAM_MEMBERS'],
         },
       },
