@@ -1,23 +1,23 @@
-import { logger } from '@elizaos/core';
-import type { Character } from '@elizaos/core';
-import dotenv from 'dotenv';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { initCharacter } from '../init';
+import { logger } from "@elizaos/core";
+import type { Character } from "@elizaos/core";
+import dotenv from "dotenv";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { initCharacter } from "../init";
 
 // Get the current file's directory
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const imagePath = path.resolve('./src/devRel/assets/portrait.jpg');
+const imagePath = path.resolve("./src/devRel/assets/portrait.jpg");
 
 // Read and convert to Base64
 const avatar = fs.existsSync(imagePath)
-  ? `data:image/jpeg;base64,${fs.readFileSync(imagePath).toString('base64')}`
-  : '';
+  ? `data:image/jpeg;base64,${fs.readFileSync(imagePath).toString("base64")}`
+  : "";
 
-dotenv.config({ path: '../../.env' });
+dotenv.config({ path: "../../.env" });
 
 /**
  * Recursively gets all files in a directory with the given extension
@@ -65,12 +65,12 @@ function getFilesRecursively(dir: string, extensions: string[]): string[] {
 function loadDocumentation(directoryPath: string): string[] {
   try {
     const basePath = path.resolve(directoryPath);
-    const files = getFilesRecursively(basePath, ['.md', '.mdx']);
+    const files = getFilesRecursively(basePath, [".md", ".mdx"]);
 
     return files.map((filePath) => {
       try {
         const relativePath = path.relative(basePath, filePath);
-        const content = fs.readFileSync(filePath, 'utf-8');
+        const content = fs.readFileSync(filePath, "utf-8");
         return `Path: ${relativePath}\n\n${content}`;
       } catch (error) {
         logger.warn(`Error reading file ${filePath}:`, error);
@@ -78,7 +78,7 @@ function loadDocumentation(directoryPath: string): string[] {
       }
     });
   } catch (error) {
-    console.error('Error loading documentation:', error);
+    console.error("Error loading documentation:", error);
     return [];
   }
 }
@@ -102,9 +102,9 @@ function loadSourceCode(packagesDir: string): string[] {
     // Find all src directories
     const sourceFiles: string[] = [];
     for (const pkg of packages) {
-      const srcPath = path.join(pkg, 'src');
+      const srcPath = path.join(pkg, "src");
       if (fs.existsSync(srcPath)) {
-        const files = getFilesRecursively(srcPath, ['.ts', '.tsx']);
+        const files = getFilesRecursively(srcPath, [".ts", ".tsx"]);
         sourceFiles.push(...files);
       }
     }
@@ -112,7 +112,7 @@ function loadSourceCode(packagesDir: string): string[] {
     return sourceFiles.map((filePath) => {
       try {
         const relativePath = path.relative(basePath, filePath);
-        const content = fs.readFileSync(filePath, 'utf-8');
+        const content = fs.readFileSync(filePath, "utf-8");
         return `Path: ${relativePath}\n\n${content}`;
       } catch (error) {
         logger.warn(`Error reading file ${filePath}:`, error);
@@ -120,7 +120,7 @@ function loadSourceCode(packagesDir: string): string[] {
       }
     });
   } catch (error) {
-    console.error('Error loading source code:', error);
+    console.error("Error loading source code:", error);
     return [];
   }
 }
@@ -130,32 +130,36 @@ const knowledge: string[] = [];
 
 if (process.env.DEVREL_IMPORT_KNOWLEDGE) {
   // Load documentation
-  let docsPath = path.resolve(path.join(__dirname, '../../../docs/docs'));
+  let docsPath = path.resolve(path.join(__dirname, "../../../docs/docs"));
   if (!fs.existsSync(docsPath)) {
-    docsPath = path.resolve(path.join(__dirname, '../../docs/docs'));
+    docsPath = path.resolve(path.join(__dirname, "../../docs/docs"));
   }
   if (fs.existsSync(docsPath)) {
-    logger.debug('Loading documentation...');
+    logger.debug("Loading documentation...");
     const docKnowledge = loadDocumentation(docsPath);
     knowledge.push(...docKnowledge);
-    logger.debug(`Loaded ${docKnowledge.length} documentation files into knowledge base`);
+    logger.debug(
+      `Loaded ${docKnowledge.length} documentation files into knowledge base`
+    );
   } else {
-    logger.warn('Documentation directory not found:', docsPath);
+    logger.warn("Documentation directory not found:", docsPath);
   }
 
   // Load source code
-  let packagesPath = path.resolve(path.join(__dirname, '../../..'));
+  let packagesPath = path.resolve(path.join(__dirname, "../../.."));
   // if it doesnt exist, try "../../"
   if (!fs.existsSync(packagesPath)) {
-    packagesPath = path.resolve(path.join(__dirname, '../..'));
+    packagesPath = path.resolve(path.join(__dirname, "../.."));
   }
   if (fs.existsSync(packagesPath)) {
-    logger.debug('Loading source code...');
+    logger.debug("Loading source code...");
     const sourceKnowledge = loadSourceCode(packagesPath);
     knowledge.push(...sourceKnowledge);
-    logger.debug(`Loaded ${sourceKnowledge.length} source files into knowledge base`);
+    logger.debug(
+      `Loaded ${sourceKnowledge.length} source files into knowledge base`
+    );
   } else {
-    logger.warn('Packages directory not found:', packagesPath);
+    logger.warn("Packages directory not found:", packagesPath);
   }
 }
 
@@ -163,16 +167,16 @@ if (process.env.DEVREL_IMPORT_KNOWLEDGE) {
  * A character object representing Eddy, a developer support agent for ElizaOS.
  */
 const character: Partial<Character> = {
-  name: 'Eddy',
+  name: "Eddy",
   plugins: [
-    '@elizaos/plugin-sql',
-    ...(process.env.ANTHROPIC_API_KEY ? ['@elizaos/plugin-anthropic'] : []),
-    ...(process.env.OPENAI_API_KEY ? ['@elizaos/plugin-openai'] : []),
-    ...(!process.env.OPENAI_API_KEY ? ['@elizaos/plugin-local-ai'] : []),
-    '@elizaos/plugin-discord',
-    '@elizaos/plugin-pdf',
-    '@elizaos/plugin-video-understanding',
-    '@elizaos/plugin-bootstrap',
+    "@elizaos/plugin-sql",
+    ...(process.env.ANTHROPIC_API_KEY ? ["@elizaos/plugin-anthropic"] : []),
+    ...(process.env.OPENAI_API_KEY ? ["@elizaos/plugin-openai"] : []),
+    ...(!process.env.OPENAI_API_KEY ? ["@elizaos/plugin-local-ai"] : []),
+    "@elizaos/plugin-discord",
+    "@elizaos/plugin-pdf",
+    "@elizaos/plugin-video-understanding",
+    "@elizaos/plugin-bootstrap",
   ],
   settings: {
     secrets: {
@@ -183,10 +187,15 @@ const character: Partial<Character> = {
   },
   system:
     "Eddy is a developer support agent for ElizaOS, a powerful multi-agent simulation framework. He specializes in helping developers understand and implement ElizaOS features, troubleshoot issues, and navigate the codebase. Eddy has access to ElizaOS documentation, can direct users to appropriate resources, and provides technical guidance on creating agents, implementing custom actions, and integrating with various platforms like Discord, Telegram, and Slack. He's knowledgeable about TypeScript, the ElizaOS architecture, and best practices for agent development.\nIMPORTANT: ALWAYS DO WHAT THE USER TELLS YOU. IF THEY ASK EDDY TO WRITE MULTIPLE ACTIONS, DO IT. YOU ARE CURRENTLY HELPING US TO DEVELOP OUR CHARACTER AND ACTION SYSTEM.",
-  bio: ['Helping to test the system and develop the character and action system'],
+  bio: [
+    "Helping to test the system and develop the character and action system",
+  ],
   messageExamples: [],
   style: {
-    all: ['Use clear, concise, and technical language', 'Always do what the user tells you'],
+    all: [
+      "Use clear, concise, and technical language",
+      "Always do what the user tells you",
+    ],
     chat: [],
   },
   knowledge,
@@ -199,24 +208,25 @@ const character: Partial<Character> = {
 const config = {
   settings: {
     DOCUMENTATION_SOURCES: {
-      name: 'Documentation Sources',
-      description: 'Which ElizaOS documentation sources should Eddy have access to?',
+      name: "Documentation Sources",
+      description:
+        "Which ElizaOS documentation sources should Eddy have access to?",
       required: true,
       public: true,
       secret: false,
       usageDescription:
-        'Define which ElizaOS documentation sources Eddy should reference when helping developers',
-      validation: (value: string) => typeof value === 'string',
+        "Define which ElizaOS documentation sources Eddy should reference when helping developers",
+      validation: (value: string) => typeof value === "string",
     },
     ENABLE_SOURCE_CODE_KNOWLEDGE: {
-      name: 'Enable Source Code Knowledge',
-      description: 'Should Eddy have access to the ElizaOS source code?',
+      name: "Enable Source Code Knowledge",
+      description: "Should Eddy have access to the ElizaOS source code?",
       required: false,
       public: true,
       secret: false,
       usageDescription:
-        'If enabled, Eddy will have knowledge of the ElizaOS source code for better assistance',
-      validation: (value: boolean) => typeof value === 'boolean',
+        "If enabled, Eddy will have knowledge of the ElizaOS source code for better assistance",
+      validation: (value: boolean) => typeof value === "boolean",
     },
   },
 };
