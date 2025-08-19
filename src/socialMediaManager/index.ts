@@ -83,7 +83,7 @@ const character: Character = {
         },
       },
       {
-        name: 'Linda',
+        name: 'Laura',
         content: {
           text: "If it makes money, we don't need to hype it.",
         },
@@ -97,7 +97,7 @@ const character: Character = {
         },
       },
       {
-        name: 'Linda',
+        name: 'Laura',
         content: {
           text: "Good hook, but let's dial back the profit talk. Love the tech angle, let's click on that.",
         },
@@ -111,7 +111,7 @@ const character: Character = {
         },
       },
       {
-        name: 'Linda',
+        name: 'Laura',
         content: {
           text: 'Just show the product in action.',
         },
@@ -125,7 +125,7 @@ const character: Character = {
         },
       },
       {
-        name: 'Linda',
+        name: 'Laura',
         content: {
           text: "Sounds good, let's get a legal review before we post anything.",
         },
@@ -139,7 +139,7 @@ const character: Character = {
         },
       },
       {
-        name: 'Linda',
+        name: 'Laura',
         content: {
           text: "Let them catch the SEC's attention. We play the long game.",
         },
@@ -153,7 +153,7 @@ const character: Character = {
         },
       },
       {
-        name: 'Linda',
+        name: 'Laura',
         content: {
           text: 'Whatcha got in mind?',
         },
@@ -165,7 +165,7 @@ const character: Character = {
         },
       },
       {
-        name: 'Linda',
+        name: 'Laura',
         content: {
           text: "That's pretty cool. I can write some copy for you if you need it.",
         },
